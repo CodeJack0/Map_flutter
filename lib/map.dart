@@ -14,6 +14,14 @@ class OSMMapScreenState extends State<OSMMapScreen> {
   Location location = Location();
   LocationData? _currentLocation;
 
+  // Define the bounds for Albay, Philippines (Southwest and Northeast coordinates)
+  final LatLngBounds albayBounds = LatLngBounds(
+    LatLng(12.95, 123.4), // Southwest corner
+    LatLng(13.45, 124.0), // Northeast corner
+  );
+
+  final MapController _mapController = MapController();
+
   @override
   void initState() {
     super.initState();
@@ -62,9 +70,27 @@ class OSMMapScreenState extends State<OSMMapScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Albay, Philippines')),
       body: FlutterMap(
+        mapController: _mapController,
         options: MapOptions(
-          initialCenter: initialLocation, // Use the current location as center
-          initialZoom: 10.0,
+          initialCenter: initialLocation,
+          initialZoom: 12.0, // Start at a zoom level
+          maxZoom: 20.0, // Limit the zoom-out level
+          minZoom: 5.0, // Prevent zooming in too far
+          onPositionChanged: (position, hasGesture) {
+            if (!albayBounds.contains(position.center)) {
+              final LatLng restrictedCenter = LatLng(
+                position.center.latitude.clamp(
+                  albayBounds.southWest.latitude,
+                  albayBounds.northEast.latitude,
+                ),
+                position.center.longitude.clamp(
+                  albayBounds.southWest.longitude,
+                  albayBounds.northEast.longitude,
+                ),
+              );
+              _mapController.move(restrictedCenter, position.zoom);
+            }
+          },
         ),
         children: [
           TileLayer(
