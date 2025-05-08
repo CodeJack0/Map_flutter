@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:location/location.dart'; // Import the location package
+import 'package:location/location.dart';
 
 class OSMMapScreen extends StatefulWidget {
   const OSMMapScreen({super.key});
@@ -13,90 +14,161 @@ class OSMMapScreen extends StatefulWidget {
 class OSMMapScreenState extends State<OSMMapScreen> {
   Location location = Location();
   LocationData? _currentLocation;
+  final MapController _mapController = MapController();
 
-  // Define the bounds for Albay, Philippines (Southwest and Northeast coordinates)
   final LatLngBounds albayBounds = LatLngBounds(
-    LatLng(12.95, 123.4), // Southwest corner
-    LatLng(13.45, 124.0), // Northeast corner
+    LatLng(12.95, 123.4), // Southwest
+    LatLng(13.45, 124.0), // Northeast
   );
 
-  final MapController _mapController = MapController();
+  List<Marker> _markers = [];
+  bool _canPlaceMarker = false; // 👈 Add this flag
 
   @override
   void initState() {
     super.initState();
-    _getLocation(); // Call the function to get the current location
+    _getLocation();
   }
 
-  // Function to get current location
   Future<void> _getLocation() async {
     bool serviceEnabled;
     PermissionStatus permissionGranted;
 
-    // Check if location services are enabled
     serviceEnabled = await location.serviceEnabled();
     if (!serviceEnabled) {
       serviceEnabled = await location.requestService();
-      if (!serviceEnabled) {
-        return; // Return if the user denies enabling location service
-      }
+      if (!serviceEnabled) return;
     }
 
-    // Check if permission is granted
     permissionGranted = await location.hasPermission();
     if (permissionGranted == PermissionStatus.denied) {
       permissionGranted = await location.requestPermission();
-      if (permissionGranted != PermissionStatus.granted) {
-        return; // Return if permission is denied
-      }
+      if (permissionGranted != PermissionStatus.granted) return;
     }
 
-    // Get current location data
     _currentLocation = await location.getLocation();
-
-    setState(() {
-      // Update the state with the fetched location
-    });
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    // Default to a fixed location (Albay, Philippines) if location data is not available
     final LatLng initialLocation =
         _currentLocation == null
-            ? LatLng(13.1771, 123.5938) // Albay
+            ? LatLng(13.1771, 123.5938)
             : LatLng(_currentLocation!.latitude!, _currentLocation!.longitude!);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Albay, Philippines')),
-      body: FlutterMap(
-        mapController: _mapController,
-        options: MapOptions(
-          initialCenter: initialLocation,
-          initialZoom: 12.0, // Start at a zoom level
-          maxZoom: 20.0, // Limit the zoom-out level
-          minZoom: 5.0, // Prevent zooming in too far
-          onPositionChanged: (position, hasGesture) {
-            if (!albayBounds.contains(position.center)) {
-              final LatLng restrictedCenter = LatLng(
-                position.center.latitude.clamp(
-                  albayBounds.southWest.latitude,
-                  albayBounds.northEast.latitude,
-                ),
-                position.center.longitude.clamp(
-                  albayBounds.southWest.longitude,
-                  albayBounds.northEast.longitude,
-                ),
-              );
-              _mapController.move(restrictedCenter, position.zoom);
-            }
-          },
-        ),
+      body: Column(
         children: [
-          TileLayer(
-            urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-            subdomains: ['a', 'b', 'c'],
-            userAgentPackageName: 'com.example.yourapp',
+          // Search Bar below AppBar
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10.0),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.5),
+                    blurRadius: 5.0,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search for a location...',
+                  border: InputBorder.none,
+                  icon: Icon(Icons.search, color: Colors.grey),
+                ),
+              ),
+            ),
+          ),
+
+          Expanded(
+            child: Stack(
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: initialLocation,
+                    initialZoom: 12,
+                    maxZoom: 16,
+                    minZoom: 12,
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.all,
+                    ),
+                    onTap: (tapPosition, latlng) {
+                      if (_canPlaceMarker && albayBounds.contains(latlng)) {
+                        setState(() {
+                          _markers = [
+                            Marker(
+                              point: latlng,
+                              width: 80,
+                              height: 80,
+                              child: const Icon(
+                                Icons.location_pin,
+                                color: Colors.red,
+                                size: 40,
+                              ),
+                            ),
+                          ];
+                          _canPlaceMarker = false; // Reset after placing
+                        });
+                      }
+                    },
+                    onPositionChanged: (position, hasGesture) {
+                      if (!albayBounds.contains(position.center)) {
+                        final LatLng restrictedCenter = LatLng(
+                          position.center.latitude.clamp(
+                            albayBounds.southWest.latitude,
+                            albayBounds.northEast.latitude,
+                          ),
+                          position.center.longitude.clamp(
+                            albayBounds.southWest.longitude,
+                            albayBounds.northEast.longitude,
+                          ),
+                        );
+                        _mapController.move(restrictedCenter, position.zoom);
+                      }
+                    },
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                      subdomains: ['a', 'b', 'c'],
+                      userAgentPackageName: 'com.example.yourapp',
+                    ),
+                    const CurrentLocationLayer(),
+                    MarkerLayer(markers: _markers),
+                  ],
+                ),
+
+                // Floating Button to Enable Marker Mode
+                Positioned(
+                  bottom: 20,
+                  right: 20,
+                  child: FloatingActionButton(
+                    onPressed: () {
+                      setState(() {
+                        _canPlaceMarker = true;
+                      });
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Tap on the map to place a marker.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    child: const Icon(Icons.add_location_alt),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
